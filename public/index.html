@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-CAM</title>
+<style>
+  body { font-family: sans-serif; background:#111; color:#eee; text-align:center; margin:0; padding:20px; }
+  #status { margin:10px; font-weight:bold; }
+  .online { color:#4caf50; } .offline { color:#f44336; }
+  button { font-size:18px; padding:12px 24px; margin:6px; border:0; border-radius:8px; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  #btnPhoto { background:#2196f3; color:#fff; }
+  #btnStream { background:#4caf50; color:#fff; }
+  #btnStream.active { background:#f44336; }
+  #view { max-width:100%; width:640px; min-height:240px; background:#000; border-radius:8px; }
+  #msg { min-height:24px; color:#ffb74d; }
+  a { color:#8cf; display:block; margin-top:10px; }
+</style>
+</head>
+<body>
+  <h2>ESP32-CAM</h2>
+  <div id="status" class="offline">Connexion...</div>
+  <div>
+    <button id="btnPhoto">Take photo</button>
+    <button id="btnStream">Take streaming</button>
+  </div>
+  <div id="msg"></div>
+  <img id="view" alt="">
+  <a id="download" style="display:none" download="photo.jpg">Télécharger la photo</a>
+
+<script>
+  const view = document.getElementById('view');
+  const statusEl = document.getElementById('status');
+  const btnPhoto = document.getElementById('btnPhoto');
+  const btnStream = document.getElementById('btnStream');
+  const msg = document.getElementById('msg');
+  const dl = document.getElementById('download');
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+  let streaming = false;
+
+  async function majStatus() {
+    try {
+      const r = await fetch('/api/status');
+      const { online } = await r.json();
+      statusEl.textContent = online ? 'Caméra connectée' : 'Caméra hors ligne';
+      statusEl.className = online ? 'online' : 'offline';
+    } catch {
+      statusEl.textContent = 'Serveur injoignable';
+      statusEl.className = 'offline';
+    }
+  }
+  majStatus();
+  setInterval(majStatus, 3000);
+
+  function stopStream() {
+    if (!streaming) return;
+    streaming = false;
+    view.src = BLANK;               // coupe la connexion du flux
+    btnStream.textContent = 'Take streaming';
+    btnStream.classList.remove('active');
+  }
+
+  btnPhoto.onclick = async () => {
+    stopStream();
+    btnPhoto.disabled = true;
+    msg.textContent = 'Prise de la photo...';
+    dl.style.display = 'none';
+    try {
+      const r = await fetch('/api/take', { method: 'POST' });
+      if (!r.ok) throw new Error();
+      const url = '/photo.jpg?t=' + Date.now();
+      view.src = url;
+      dl.href = url;
+      dl.style.display = 'block';
+      msg.textContent = '';
+    } catch {
+      msg.textContent = 'La caméra ne répond pas (hors ligne ?)';
+    }
+    btnPhoto.disabled = false;
+  };
+
+  btnStream.onclick = () => {
+    if (streaming) { stopStream(); return; }
+    streaming = true;
+    dl.style.display = 'none';
+    msg.textContent = '';
+    view.src = '/stream.mjpg?t=' + Date.now();
+    btnStream.textContent = 'Stop streaming';
+    btnStream.classList.add('active');
+  };
+</script>
+</body>
+</html>
